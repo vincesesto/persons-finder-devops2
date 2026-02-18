@@ -1,108 +1,65 @@
-# 👥 Persons Finder – Backend Challenge
+# 🛠️ Persons Finder – DevOps & SRE Challenge (AI-Augmented)
 
-Welcome to the **Persons Finder** backend challenge! This project simulates the backend for a mobile app that helps users find people around them.
+Welcome to the **Persons Finder** DevOps challenge.
 
-Your task is to implement a REST API that allows clients to create, update, and search for people based on location and other criteria.
+**Scenario:**
+The development team has finished the `persons-finder` API (a Java/Kotlin Spring Boot app that talks to an external LLM). It works on their machine. Now, **you** need to take it to production.
 
----
-
-## 📌 Requirements
-
-Implement the following endpoints:
-
-### ➕ `POST /persons`
-
-Create a new person.
+**Our Philosophy:** We want engineers who use AI to move fast, but who have the wisdom to verify every line.
 
 ---
 
-### ✏️ `PUT /persons/{id}/location`
+## 🎯 The Mission
 
-Update (or create if not exists) a person's current **latitude** and **longitude**.
+Your task is to Containerize, Infrastructure-as-Code (IaC), and secure this application.
 
----
+### 1. 🐳 Containerization
+*   Create a `Dockerfile` for the application.
+*   **AI Challenge:** Ask an AI (ChatGPT/Claude) to write the Dockerfile.
+*   **Audit:** The AI likely missed best practices (e.g., non-root user, multi-stage build, pinning versions). **Fix them.**
+*   *Output:* An optimized `Dockerfile`.
 
-### 🔍 `GET /persons/nearby`
+### 2. ☁️ Infrastructure as Code (Kubernetes/Terraform)
+*   Deploy this app to a local cluster (Minikube/Kind) or output Terraform for AWS/GCP.
+*   **Requirements:**
+    *   **Secrets:** The app needs an `OPENAI_API_KEY`. Do not bake it into the image. Show how you inject it securely (K8s Secrets, Vault, etc.).
+    *   **Scaling:** Configure HPA (Horizontal Pod Autoscaler) based on CPU or custom metrics.
+*   **AI Task:** Use AI to generate the K8s manifests (Deployment, Service, Ingress). **Document what you had to fix.** (Did it forget `readinessProbe`? Did it request 400 CPUs?)
 
-Find people around a **query location**, specified using the following query parameters:
+### 3. 🛡️ The "AI Firewall" (Architecture)
+The app sends user PII (names, bios) to an external LLM provider.
+*   **Design Challenge:** Create a short architectural diagram or description (`ARCHITECTURE.md`) showing how you would secure this egress traffic.
+*   **Question:** How would you implement a "PII Redaction Sidecar" or Gateway logic to prevent real names from leaving our cluster? You don't have to build it, just design the infrastructure for it.
 
-* `lat`: latitude
-* `lon`: longitude
-* `radiusKm`: radius in kilometres
-
-> 🧠 **Extra challenge**: Return the list **sorted by distance** to the query point.
-
----
-
-### 👤 `GET /persons`
-
-Retrieve one or more persons by their IDs. Accepts:
-
-* `id`: one or more person IDs (e.g., `?id=1&id=2`)
-
----
-
-## 📦 Expected Output
-
-All responses must be in **valid JSON format**, following clean and consistent REST API design principles.
+### 4. 🤖 CI/CD & AI Usage
+*   Create a CI pipeline (GitHub Actions preferred).
+*   **The AI Twist:** We want to fail the build if the code "looks unsafe".
+    *   Add a step in the pipeline that runs a security scanner (Trivy/Snyk) OR a mocked "AI Code Reviewer" step.
 
 ---
 
-## 🧱 What You Need to Build
+## 📝 Mandatory: The AI Log (`AI_LOG.md`)
 
-* Domain models: `Person`, `Location`, etc.
-* Services for saving, updating, and querying data
-* In-memory storage or a basic persistent layer
-* Proper project structure (e.g. controller / service / repository)
-* Extra bonus if you use UseCase pattern (Controller -> Use Case (business logic) -> Service -> Repository)
+We hire engineers who know how to collaborate with machines.
+Please verify your work by documenting:
 
----
+1.  **The Prompt:** "I asked ChatGPT: *'Write a K8s deployment for a Spring Boot app'*."
+2.  **The Flaw:** "It gave me a deployment running as `root` and with no resource limits."
+3.  **The Fix:** "I modified lines 12-15 to add `securityContext`."
 
-## 🧪 Bonus Points
-
-### ✅ Testing
-
-* Include **unit tests** for service logic
-* Include **integration tests** for API endpoints
-* Use a test framework like **JUnit**, **MockK**, or **Mockito**
-
----
-
-### 🧠 Scalability Challenge
-
-* Seed the system with **1 million**, **10 million**, and **100 million** records
-* Benchmark and **optimise** the `GET /persons/nearby` endpoint
-* Explain any indexing or query optimisation strategies used
-
----
-
-### 📚 Clean Code
-
-* Use **DTOs** for API request and response bodies
-* Apply proper **validation**, **error handling**, and maintain clean separation of concerns
+**If you do not include this log, we will not review your submission.**
 
 ---
 
 ## ✅ Getting Started
 
-```bash
-git clone https://github.com/leonardoduartelana/persons-finder.git
-cd persons-finder
-```
+1.  Clone this repo.
+2.  Assume the code inside is a buildable Spring Boot app (or build it with `./gradlew build`).
+3.  Push your solution (Dockerfile, K8s manifests/Terraform, CI configs) to your own public repository.
 
-Implement your solution and push it to your **own GitHub repository**.
+## 📬 Submission
 
----
-
-## 📬 Submission & Questions
-
-* Submit the link to your GitHub repository
-* For any questions, email: [leo@emerge.nz](mailto:leo@emerge.nz)
-
----
-
-## 💡 Tips
-
-* Use **OpenAPI/Swagger** to document your APIs (optional, but encouraged)
-* Handle edge cases like missing locations or malformed input
-* Design the system **as if it were going into production**
+Submit your repository link. We care about:
+*   **Security:** How you handle the API Key.
+*   **Reliability:** Probes, Limits, Scaling.
+*   **AI Maturity:** Your `AI_LOG.md` (Did you blindly trust the bot, or did you engineer it?).
