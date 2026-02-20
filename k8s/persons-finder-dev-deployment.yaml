@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: persons-finder
+  namespace: persons-finder-dev
+  labels:
+    app: persons-finder
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: persons-finder
+  template:
+    metadata:
+      labels:
+        app: persons-finder
+    spec:
+      containers:
+        - name: persons-finder
+          image: persons-finder:local
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-lc"]
+          args:
+            - java -jar /app/app.jar
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: persons-finder-openai
+                  key: OPENAI_API_KEY
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20

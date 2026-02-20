@@ -36,3 +36,25 @@ docker run --rm \
   gradle wrapper --gradle-version 8.7
 ```
 
+## Setting up the image in kubernetes
+The prompt asked:
+I have a working docker image that is now running with the command:
+docker run --rm -p 8080:8080 -e OPENAI_API_KEY=<API_KEY> persons-finder:local sh -lc 'java -jar /app/app.jar'
+
+I would like to deploy it to kubernetes in a new namespace called persons-finder-dev. Can you please create the yaml files to create
+- the new namespace
+- create a secret to stop the value for OPENAI_API_KEY
+- create the new deployment to run the image, but the value for OPENAI_API_KEY should be mounted as a secret 
+- create a hpa to scale based on CPU hitting over 50%
+- create a service to allow access to this deployment
+
+
+```
+kubectl apply -f persons-finder-dev-namespace.yaml
+kubectl apply -f persons-finder-dev-secret.yaml
+kubectl apply -f persons-finder-dev-deployment.yaml
+kubectl apply -f persons-finder-dev-service.yaml
+kubectl apply -f persons-finder-dev-hpa.yaml
+
+http://persons-finder.persons-finder-dev.svc.cluster.local:8080
+```
