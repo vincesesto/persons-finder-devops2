@@ -58,3 +58,39 @@ kubectl apply -f persons-finder-dev-hpa.yaml
 
 http://persons-finder.persons-finder-dev.svc.cluster.local:8080
 ```
+
+## Creating Secret Values
+The promt I asked:
+The persons-finder-dev-secret.yaml looks really good. I don't want to hard code the API key. Can you please provide me with an easy but secure way to inject the secret when it is being deployed?
+
+```
+# The simplest “easy + reasonably secure” approach is:
+
+# 1. commit a template secret that contains no secret material, and
+apiVersion: v1
+kind: Secret
+metadata:
+  name: persons-finder-openai
+  namespace: persons-finder-dev
+type: Opaque
+# Intentionally no data/stringData in this template.
+
+# 2. create/update the real Secret at deploy time from an environment variable (or prompt) on the CI runner / your terminal.
+export OPENAI_API_KEY='...your real key...'
+
+# Then run
+kubectl -n persons-finder-dev create secret generic persons-finder-openai \
+  --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+## Create an ingress rule
+The prompt I asked:
+Sorry, I forgot to metion, the service also needs to be accessible via the internet. Can you please create an ingress yaml to use with this service?
+
+```
+#Set spec.rules[0].host to a real DNS name you control (point an A/AAAA/CNAME at your ingress controller’s external address).
+#If you’re not using nginx-ingress, tell me which ingress controller you use (AWS ALB, GCE, Traefik, etc.) and I’ll adjust annotations/class accordingly.
+
+persons-finder-dev-ingress.yaml
+```
