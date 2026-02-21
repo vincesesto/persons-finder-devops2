@@ -94,3 +94,42 @@ Sorry, I forgot to metion, the service also needs to be accessible via the inter
 
 persons-finder-dev-ingress.yaml
 ```
+
+## CI and CD
+Prompt I asked
+We have our Dockerfile building and running successfully. I would like to create a github actions pipeline that checks out our code, build the docker image, runs a security scan over the image to make sure there are no issues, and if the scan is successful, pushes the image to an ECR repo we can configure at a later time? The github actions plan will need to fail if the scan also fails
+
+```
+CI created in file: .github/workflows/docker-build-scan-push-ecr.yaml
+
+What you’ll need to configure later
+1. ECR repository name - Update env.ECR_REPOSITORY when you know it (or keep as-is if your ECR repo will be persons-finder).
+2. AWS region - Update env.AWS_REGION.
+3. AWS OIDC role - Create an IAM Role trusted for GitHub OIDC, with permissions to push to ECR. Store its ARN in GitHub Actions Secret:
+- AWS_ROLE_TO_ASSUME = arn:aws:iam::<account-id>:role/<role-name>
+
+Failure behavior (as requested)
+- The Trivy step has exit-code: "1" and scans HIGH,CRITICAL.
+- If it finds any HIGH/CRITICAL vulns (per Trivy rules), the workflow fails and will not push.
+```
+
+Another prompt:
+I'd like to also create a seperate deployment github actions that will deploy the new image to the deployment
+
+```
+Deployment workflow created in: 
+
+Key setup items you need to provide:
+
+secrets.AWS_ROLE_TO_ASSUME: same role used for ECR push (or a different one) with access as needed.
+secrets.AWS_ACCOUNT_ID: your AWS account ID (used to construct the ECR image URL).
+secrets.KUBECONFIG_B64: base64-encoded kubeconfig that has access to your cluster/namespace.
+
+
+
+
+
+```
+
+
+

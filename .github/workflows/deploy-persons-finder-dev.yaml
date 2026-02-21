@@ -1,0 +1,86 @@
+name: Deploy persons-finder to persons-finder-dev
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (e.g., a git SHA). Leave blank to use latest."
+        required: false
+        default: "latest"
+  workflow_run:
+    workflows: ["Build, Scan, and Push Docker image to ECR"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+  id-token: write # required for AWS OIDC auth
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: persons-finder
+  K8S_NAMESPACE: persons-finder-dev
+  K8S_DEPLOYMENT: persons-finder
+  K8S_CONTAINER: persons-finder
+
+jobs:
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+
+    # Only auto-deploy when the build workflow succeeded.
+    # Manual workflow_dispatch always runs.
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+
+    steps:
+      - name: Checkout (optional; useful if you also apply manifests from repo)
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+
+      # This expects your Kubeconfig (or token/cluster details) to be provided as a secret.
+      # Easiest path is a base64-encoded kubeconfig stored in GitHub Secrets.
+      - name: Set up kubeconfig
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 --decode > "$HOME/.kube/config"
+          chmod 600 "$HOME/.kube/config"
+
+      - name: Compute image reference
+        id: img
+        shell: bash
+        run: |
+          TAG_INPUT="${{ github.event.inputs.image_tag }}"
+          if [ -z "$TAG_INPUT" ] || [ "$TAG_INPUT" = "latest" ]; then
+            TAG="latest"
+          else
+            TAG="$TAG_INPUT"
+          fi
+
+          # You can also hardcode ACCOUNT_ID or provide via secret if you prefer.
+          ACCOUNT_ID="${{ secrets.AWS_ACCOUNT_ID }}"
+          REGION="${{ env.AWS_REGION }}"
+          REPO="${{ env.ECR_REPOSITORY }}"
+
+          echo "image=${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${REPO}:${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Update deployment image
+        run: |
+          kubectl -n "${{ env.K8S_NAMESPACE }}" set image deployment/"${{ env.K8S_DEPLOYMENT }}" \
+            "${{ env.K8S_CONTAINER }}"="${{ steps.img.outputs.image }}"
+
+      - name: Wait for rollout
+        run: |
+          kubectl -n "${{ env.K8S_NAMESPACE }}" rollout status deployment/"${{ env.K8S_DEPLOYMENT }}" --timeout=5m
+
+      - name: Show resulting deployment
+        run: |
+          kubectl -n "${{ env.K8S_NAMESPACE }}" get deployment "${{ env.K8S_DEPLOYMENT }}" -o wide
+          kubectl -n "${{ env.K8S_NAMESPACE }}" describe deployment "${{ env.K8S_DEPLOYMENT }}"
