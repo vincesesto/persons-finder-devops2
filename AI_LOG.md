@@ -100,7 +100,7 @@ Prompt I asked
 We have our Dockerfile building and running successfully. I would like to create a github actions pipeline that checks out our code, build the docker image, runs a security scan over the image to make sure there are no issues, and if the scan is successful, pushes the image to an ECR repo we can configure at a later time? The github actions plan will need to fail if the scan also fails
 
 ```
-CI created in file: .github/workflows/docker-build-scan-push-ecr.yaml
+CI created in file: gha_wf/docker-build-scan-push-ecr.yaml
 
 What you’ll need to configure later
 1. ECR repository name - Update env.ECR_REPOSITORY when you know it (or keep as-is if your ECR repo will be persons-finder).
@@ -117,17 +117,13 @@ Another prompt:
 I'd like to also create a seperate deployment github actions that will deploy the new image to the deployment
 
 ```
-Deployment workflow created in: 
+Deployment workflow created in: gha_wf/deploy-persons-finder-dev.yaml 
 
 Key setup items you need to provide:
 
 secrets.AWS_ROLE_TO_ASSUME: same role used for ECR push (or a different one) with access as needed.
 secrets.AWS_ACCOUNT_ID: your AWS account ID (used to construct the ECR image URL).
 secrets.KUBECONFIG_B64: base64-encoded kubeconfig that has access to your cluster/namespace.
-
-
-
-
 
 ```
 
