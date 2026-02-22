@@ -36,96 +36,55 @@ docker run --rm \
   gradle wrapper --gradle-version 8.7
 ```
 
-## Setting up the image in kubernetes
-The prompt asked:
-I have a working docker image that is now running with the command:
-docker run --rm -p 8080:8080 -e OPENAI_API_KEY=<API_KEY> persons-finder:local sh -lc 'java -jar /app/app.jar'
-
-I would like to deploy it to kubernetes in a new namespace called persons-finder-dev. Can you please create the yaml files to create
-- the new namespace
-- create a secret to stop the value for OPENAI_API_KEY
-- create the new deployment to run the image, but the value for OPENAI_API_KEY should be mounted as a secret 
-- create a hpa to scale based on CPU hitting over 50%
-- create a service to allow access to this deployment
-
+## PII Options
+The pompt I used:
+I am just looking at the service abd the app sends user PII (names, bios) to an external provider, can you think of an easy way to implement a "PII Redaction Sidecar" or Gateway logic to prevent real names from leaving our cluster?
 
 ```
-kubectl apply -f persons-finder-dev-namespace.yaml
-kubectl apply -f persons-finder-dev-secret.yaml
-kubectl apply -f persons-finder-dev-deployment.yaml
-kubectl apply -f persons-finder-dev-service.yaml
-kubectl apply -f persons-finder-dev-hpa.yaml
+Answer
+Yes—an “easy” pattern that works well on Kubernetes is to force all outbound traffic to the external provider through a local sidecar (or egress gateway), and have that component redact/tokenize PII before it leaves the pod/cluster.
 
-http://persons-finder.persons-finder-dev.svc.cluster.local:8080
+There are two practical options, depending on how much infra you already run.
+
+Option 1 (easiest to drop in): PII-redaction sidecar + force app to use it as proxy
+How it works
+
+Add a sidecar container (Envoy or a small custom proxy) to the same Pod.
+Configure the app to send requests to the provider via the sidecar:
+either by changing the provider base URL to http://127.0.0.1:<port> (best), or
+via standard proxy env vars HTTPS_PROXY / HTTP_PROXY / NO_PROXY.
+Sidecar does:
+denylist/allowlist outbound destinations (only the provider host),
+redact names/bios in JSON before forwarding.
+Pros
+
+Minimal cluster dependencies.
+Clear boundary: “nothing leaves the pod unredacted”.
+Cons
+
+You must ensure the app can be made to use the proxy/base URL.
+Redaction needs to understand payload formats (JSON schemas).
+Implementation detail (redaction approach)
+
+If you control payload schema: redact specific JSON fields (name, bio, etc.) using a JSON transform.
+If you don’t: fall back to NLP/regex-based detection, but that’s less reliable.
+Option 2 (best control at cluster level): Service mesh egress gateway (Istio/Linkerd) + redaction filter
+How it works
+
+Use mesh policy to block direct egress from workloads.
+Allow egress only through an egress gateway that applies a redaction filter.
+This prevents bypass even if the app tries to call the internet directly.
+Pros
+
+Strong enforcement across workloads (harder to bypass).
+Central place to manage egress + audit logs.
+Cons
+
+Requires mesh install/config (more moving parts).
 ```
 
-## Creating Secret Values
-The promt I asked:
-The persons-finder-dev-secret.yaml looks really good. I don't want to hard code the API key. Can you please provide me with an easy but secure way to inject the secret when it is being deployed?
-
-```
-# The simplest “easy + reasonably secure” approach is:
-
-# 1. commit a template secret that contains no secret material, and
-apiVersion: v1
-kind: Secret
-metadata:
-  name: persons-finder-openai
-  namespace: persons-finder-dev
-type: Opaque
-# Intentionally no data/stringData in this template.
-
-# 2. create/update the real Secret at deploy time from an environment variable (or prompt) on the CI runner / your terminal.
-export OPENAI_API_KEY='...your real key...'
-
-# Then run
-kubectl -n persons-finder-dev create secret generic persons-finder-openai \
-  --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
-  --dry-run=client -o yaml | kubectl apply -f -
-```
-
-## Create an ingress rule
-The prompt I asked:
-Sorry, I forgot to metion, the service also needs to be accessible via the internet. Can you please create an ingress yaml to use with this service?
-
-```
-#Set spec.rules[0].host to a real DNS name you control (point an A/AAAA/CNAME at your ingress controller’s external address).
-#If you’re not using nginx-ingress, tell me which ingress controller you use (AWS ALB, GCE, Traefik, etc.) and I’ll adjust annotations/class accordingly.
-
-persons-finder-dev-ingress.yaml
-```
-
-## CI and CD
-Prompt I asked
-We have our Dockerfile building and running successfully. I would like to create a github actions pipeline that checks out our code, build the docker image, runs a security scan over the image to make sure there are no issues, and if the scan is successful, pushes the image to an ECR repo we can configure at a later time? The github actions plan will need to fail if the scan also fails
-
-```
-CI created in file: gha_wf/docker-build-scan-push-ecr.yaml
-
-What you’ll need to configure later
-1. ECR repository name - Update env.ECR_REPOSITORY when you know it (or keep as-is if your ECR repo will be persons-finder).
-2. AWS region - Update env.AWS_REGION.
-3. AWS OIDC role - Create an IAM Role trusted for GitHub OIDC, with permissions to push to ECR. Store its ARN in GitHub Actions Secret:
-- AWS_ROLE_TO_ASSUME = arn:aws:iam::<account-id>:role/<role-name>
-
-Failure behavior (as requested)
-- The Trivy step has exit-code: "1" and scans HIGH,CRITICAL.
-- If it finds any HIGH/CRITICAL vulns (per Trivy rules), the workflow fails and will not push.
-```
-
-Another prompt:
-I'd like to also create a seperate deployment github actions that will deploy the new image to the deployment
-
-```
-Deployment workflow created in: gha_wf/deploy-persons-finder-dev.yaml 
-
-Key setup items you need to provide:
-
-secrets.AWS_ROLE_TO_ASSUME: same role used for ECR push (or a different one) with access as needed.
-secrets.AWS_ACCOUNT_ID: your AWS account ID (used to construct the ECR image URL).
-secrets.KUBECONFIG_B64: base64-encoded kubeconfig that has access to your cluster/namespace.
-
-```
-
+## Architectural Diagram
+The Prompt I have used
+This is all great. From the information I have provided, can you please provide a basic Architectural diagram created as ARCHITECTURE.md. Please provide the basic architecture of the service, and also include the PII-redaction sidecar
 
 
