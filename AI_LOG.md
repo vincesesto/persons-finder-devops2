@@ -1,33 +1,65 @@
 # AI Log
 
-## Initial request
-I am currently looking at this repository:
+A working log of tasks and notes while improving and containerising the `persons-finder-devops2` repository.
+
+---
+
+## 1) Initial request
+
+**Repository**:  
 https://github.com/vincesesto/persons-finder-devops2.git
 
-I would like to create a Dockerfile for this repository so I can create an image to start working with my laptop and then transfer to a kubernetes environment.
+**Goal**: Create a `Dockerfile` so I can build and run the service locally on my laptop, then transfer the same image to a Kubernetes environment.
 
-Please use best practices when creating this Dockerfile, to make sure it is secure and is small and the code works quickly
-```
-# Run the Dockerfile with
+**Requirements**:
+- **Best practices**
+- **Secure**
+- **Small image**
+- **Fast builds and runtime**
+- **Application works correctly**
+
+### Build & run commands
+
+```sh
+# Build the image
 docker build -t persons-finder:local .
-docker run --rm -p 8080:8080 persons-finder:local sh -lc 'java -jar /app/app.jar'
-'''
 
-## Extra work on Dockerfile
-The Dockerfile build is failing with this error:
- => ERROR [build 7/7] RUN --mount=type=cache,target=/root/.gradle     ./gradlew --no-daemon clean bootJar -x test           0.6s
+# Run the container (example)
+docker run --rm -p 8080:8080 persons-finder:local sh -lc 'java -jar /app/app.jar'
+```
+
+---
+
+## 2) Extra work on Dockerfile (build failure)
+
+### Error observed
+
+```text
+=> ERROR [build 7/7] RUN --mount=type=cache,target=/root/.gradle     ./gradlew --no-daemon clean bootJar -x test           0.6s
 ------
- > [build 7/7] RUN --mount=type=cache,target=/root/.gradle     ./gradlew --no-daemon clean bootJar -x test:
+> [build 7/7] RUN --mount=type=cache,target=/root/.gradle     ./gradlew --no-daemon clean bootJar -x test:
 #0 0.469 Error: Could not find or load main class org.gradle.wrapper.GradleWrapperMain
 #0 0.469 Caused by: java.lang.ClassNotFoundException: org.gradle.wrapper.GradleWrapperMain
 ------
-ERROR: failed to solve: failed to solve with frontend dockerfile.v0: failed to solve with frontend gateway.v0: rpc error: code = Unknown desc = failed to build LLB: executor failed running [/bin/sh -c ./gradlew --no-daemon clean bootJar -x test]: runc did not terminate sucessfully
-
+ERROR: failed to solve: failed to solve with frontend dockerfile.v0: failed to solve with frontend gateway.v0:
+rpc error: code = Unknown desc = failed to build LLB: executor failed running
+[/bin/sh -c ./gradlew --no-daemon clean bootJar -x test]: runc did not terminate sucessfully
 ```
-#That error means the Gradle wrapper JAR is missing inside the image. ./gradlew is present, but gradle/wrapper/gradle-wrapper.jar (and/or gradle-wrapper.properties) did not get copied into the build stage.
 
-#Most common cause: your .dockerignore (or repo contents) is excluding gradle/wrapper/** or you don’t actually have the wrapper JAR committed.
+### Diagnosis
 
+This typically means the **Gradle wrapper JAR is missing inside the image**.
+
+- `./gradlew` exists
+- but `gradle/wrapper/gradle-wrapper.jar` (and/or `gradle-wrapper.properties`) is not present in the build context or not copied into the build stage.
+
+**Most common causes**:
+- `.dockerignore` accidentally excludes `gradle/wrapper/**`
+- the wrapper JAR isn’t committed into the repository
+
+### Suggested fix (regenerate wrapper)
+
+```sh
 docker run --rm \
   -u "$(id -u)":"$(id -g)" \
   -v "$PWD":/workspace \
@@ -36,55 +68,61 @@ docker run --rm \
   gradle wrapper --gradle-version 8.7
 ```
 
-## PII Options
-The pompt I used:
-I am just looking at the service abd the app sends user PII (names, bios) to an external provider, can you think of an easy way to implement a "PII Redaction Sidecar" or Gateway logic to prevent real names from leaving our cluster?
+---
 
-```
-Answer
-Yes—an “easy” pattern that works well on Kubernetes is to force all outbound traffic to the external provider through a local sidecar (or egress gateway), and have that component redact/tokenize PII before it leaves the pod/cluster.
+## 3) PII options (redaction sidecar / gateway)
 
-There are two practical options, depending on how much infra you already run.
+### Prompt used
 
-Option 1 (easiest to drop in): PII-redaction sidecar + force app to use it as proxy
-How it works
+> I am just looking at the service and the app sends user PII (names, bios) to an external provider.  
+> Can you think of an easy way to implement a “PII Redaction Sidecar” or gateway logic to prevent real names from leaving our cluster?
 
-Add a sidecar container (Envoy or a small custom proxy) to the same Pod.
-Configure the app to send requests to the provider via the sidecar:
-either by changing the provider base URL to http://127.0.0.1:<port> (best), or
-via standard proxy env vars HTTPS_PROXY / HTTP_PROXY / NO_PROXY.
-Sidecar does:
-denylist/allowlist outbound destinations (only the provider host),
-redact names/bios in JSON before forwarding.
-Pros
+### Answer (summary)
 
-Minimal cluster dependencies.
-Clear boundary: “nothing leaves the pod unredacted”.
-Cons
+An effective Kubernetes pattern is to **force all outbound traffic** to the external provider through a **local sidecar** (or a cluster egress gateway), which **redacts or tokenises PII** before it leaves the pod/cluster.
 
-You must ensure the app can be made to use the proxy/base URL.
-Redaction needs to understand payload formats (JSON schemas).
-Implementation detail (redaction approach)
+#### Option 1: PII-redaction sidecar (easiest to drop in)
 
-If you control payload schema: redact specific JSON fields (name, bio, etc.) using a JSON transform.
-If you don’t: fall back to NLP/regex-based detection, but that’s less reliable.
-Option 2 (best control at cluster level): Service mesh egress gateway (Istio/Linkerd) + redaction filter
-How it works
+**How it works**
+- Add a sidecar container (e.g., Envoy or a small custom proxy) to the same Pod.
+- Configure the app to send requests to the provider **via the sidecar** by either:
+  - Changing the provider base URL to `http://127.0.0.1:<port>` (*best*), or
+  - Using proxy env vars: `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`.
+- Sidecar responsibilities:
+  - Allowlist outbound destinations (only the provider host).
+  - Redact `name`, `bio`, etc. in JSON before forwarding.
 
-Use mesh policy to block direct egress from workloads.
-Allow egress only through an egress gateway that applies a redaction filter.
-This prevents bypass even if the app tries to call the internet directly.
-Pros
+**Pros**
+- Minimal cluster dependencies.
+- Clear boundary: *nothing leaves the pod unredacted*.
 
-Strong enforcement across workloads (harder to bypass).
-Central place to manage egress + audit logs.
-Cons
+**Cons**
+- The app must be able to use a proxy or configurable base URL.
+- Redaction must understand payload format/schemas.
 
-Requires mesh install/config (more moving parts).
-```
+**Implementation notes**
+- Prefer **schema-based JSON field redaction** if the payload structure is known/controlled.
+- NLP/regex detection is possible but less reliable.
 
-## Architectural Diagram
-The Prompt I have used
-This is all great. From the information I have provided, can you please provide a basic Architectural diagram created as ARCHITECTURE.md. Please provide the basic architecture of the service, and also include the PII-redaction sidecar
+#### Option 2: Service mesh egress gateway + redaction filter (best cluster-level control)
 
+**How it works**
+- Block direct egress from workloads using mesh policy.
+- Allow egress only through an **egress gateway** that applies a redaction filter.
 
+**Pros**
+- Strong enforcement across workloads (harder to bypass).
+- Central place for egress control and auditing.
+
+**Cons**
+- Requires service mesh installation/configuration (more moving parts).
+
+---
+
+## 4) Architectural diagram
+
+### Prompt used
+
+> This is all great. From the information I have provided, can you please provide a basic Architectural diagram created as `ARCHITECTURE.md`.  
+> Please provide the basic architecture of the service, and also include the PII-redaction sidecar.
+````
